@@ -1,0 +1,98 @@
+{//start
+    // Open the existing ROOT file in update mode
+  system("cp MARLEY_onlygamma.root MARLEY_onlygammaappend.root");
+  TFile* file = TFile::Open("MARLEY_onlygammaappend.root", "UPDATE");
+  TRandom3 random1;
+  random1.SetSeed(static_cast<unsigned int>(std::time(0)));
+   
+    // Get the existing tree from the ROOT file
+    TTree* tree = dynamic_cast<TTree*>(file->Get("mst"));
+    //Read the branches from the existing tree
+// Define variables to hold the values read from the existing branches
+    int npv;
+    double KEpv[8];
+    int pdgpv[8];
+    double KElv;//Kinetic energy of ejectile lepton
+    int pdglv;
+    double  Xlimit = 6.75;//default
+    double Ylimit = 3.25;//default
+    double Zlimit = 29.95;
+
+
+
+    // Set the branch addresses to the variables
+    tree->SetBranchAddress("np", &npv);
+    tree->SetBranchAddress("KEp", &KEpv);
+    tree->SetBranchAddress("pdgp",&pdgpv);
+    tree->SetBranchAddress("KEl",&KElv);
+    tree->SetBranchAddress("pdgl",&pdglv);
+
+
+
+    // Create new branches to append
+    int newBranchValue1;
+    double XYZv[3]={0.0};//X, Y, Z position of interaction vertex
+    int Nphv[8]={0};//Number of photons for each daughter product
+
+    double x=0;
+    double y=0;
+    double z=0;
+    int Nph1;
+    int pdg;
+    double energy;
+
+
+    // Create new branch objects and link them to the tree
+    TBranch* XYZ = tree->Branch("XYZ", &XYZv, "XYZ[3]/D");
+    TBranch* Nph = tree->Branch("Nph", &Nphv, "Nph[8]/I");//Nph[0] corresponds to leptions and Nph[1]+..... corresponds to other daughter products
+    
+    // Loop over the existing entries in the tree and fill the new branches
+    //  for (Long64_t i = 0; i < tree->GetEntries(); ++i) {
+    for (Long64_t j = 0; j < 1; ++j) {
+
+        tree->GetEntry(j);
+	x = random1.Uniform(-Xlimit,Xlimit);
+	y = random1.Uniform(-Ylimit,Ylimit);
+	z = random1.Uniform(0,Zlimit); 
+        
+	XYZv[0]=x;
+	XYZv[1]=y;
+	XYZv[2]=z;
+
+	////running over particles in an event
+	energy=KElv;
+	pdg=pdglv;
+	int status = system(("./vdrift_build/g4workshop "+std::to_string(x)+" "+std::to_string(y)+" "+std::to_string(z)+" "+std::to_string(pdg)+" "+std::to_string(energy)).c_str());
+	TFile f("arapuca.root");
+	TH1D *hist=(TH1D*)f.Get("hv");
+	Nph1=hist->Integral(5, 164)+hist->Integral(165, 484)+hist->Integral(637, 676);
+	Nphv[0]=Nph1;
+
+	for(int i=0;i<npv;i++){
+
+	  pdg=pdgpv[i];
+	  energy=KEpv[i];
+	  // int status = system("./vdrift_build/g4workshop 0 0 2 $pdg $energy");
+	  int status = system(("./vdrift_build/g4workshop "+std::to_string(x)+" "+std::to_string(y)+" "+std::to_string(z)+" "+std::to_string(pdg)+" "+std::to_string(energy)).c_str());
+
+	  TFile f("arapuca.root");
+	  TH1D *hist=(TH1D*)f.Get("hv");
+	  Nph1=hist->Integral(5, 164)+hist->Integral(165, 484)+hist->Integral(637, 676);
+
+	  std::cout<<"PDGcode vs Nph "<<pdgpv[i]<<"  "<<Nph1<<std::endl;
+	  Nphv[i+1]=Nph1;
+	}
+	////////////////////////////////////////////
+	// Fill the new branches
+	XYZ->Fill();
+	Nph->Fill();
+    }
+    
+    // Write the modified tree back to the file
+    file->cd();
+    tree->Write("", TObject::kOverwrite);
+    
+    // Save the changes and close the file
+    file->Write();
+    file->Close();
+}
